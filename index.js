@@ -1,13 +1,67 @@
-var express = require('express')
-var app = express()
+var deferred = require("deferred");
+var request = require("request");
+var mongoose = require("mongoose");
 
-app.set('port', (process.env.PORT || 5000))
-app.use(express.static(__dirname + '/public'))
+mongoose.connect(process.env.MONGODB_URI);
 
-app.get('/', function(request, response) {
-  response.send('Hello World!')
-})
+var trackSchema = {
+    name: String,
+    title: String,
+    artist: String,
+    station: String
+};
 
-app.listen(app.get('port'), function() {
-  console.log("Node app is running at localhost:" + app.get('port'))
-})
+var Track = mongoose.model("Track", trackSchema);
+
+function saveTrack() {
+    var future = deferred();
+
+    var track = new Track();
+    track.name = name;
+    track.title = title;
+    track.artist = artist;
+    track.station = station;
+
+    track.save(function(error) {
+        if (error) {
+            console.log(error);
+
+            future.reject(error);
+        } else {
+            console.log("saved track " + track.name + " from station " + track.station);
+
+            future.resolve();
+        }
+    });
+
+    return future.promise;
+}
+
+function fetchRadioOe3() {
+    var future = deferred();
+
+    var requestOptions = {
+        url: "http://oe3meta.orf.at/oe3mdata/WebPlayerFiles/PlayList200.json",
+        json: true
+    };
+
+    request(requestOptions, function(error, response, body) {
+        if (!error && response.statusCode === 200) {
+            for (var i = 0; i < body.length; i++) {
+                var trackData = body[i];
+
+                var title = trackData["SongName"];
+                var artist = trackData["Artist"];
+                var name = artist + " - " + title;
+                var station = "OE3";
+
+                // TODO: wait for tracks to be saved
+                saveTrack(name, title, artist, station);
+            }
+        } else {
+            future.reject(error);
+        }
+    });
+
+    return future.promise;
+}
