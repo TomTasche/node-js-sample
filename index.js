@@ -43,16 +43,17 @@ function saveTrack(name, title, artist, station) {
 function waitFor(promises) {
   var future = deferred();
 
-  var countdown = promises.length;
+  var count = promises.length;
+  var countdown = function() {
+    count--;
+
+    if (count === 0) {
+      future.resolve();
+    }
+  }
 
   for (var i = 0; i < promises.length; i++) {
-    promises[i].then(function() {
-      countdown--;
-
-      if (countdown === 0) {
-        future.resolve();
-      }
-    });
+    promises[i].then(countdown).catch(countdown);
   }
 
   return future.promise;
