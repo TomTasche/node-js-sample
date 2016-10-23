@@ -2,6 +2,7 @@
   "name": "radio-scraper",
   "version": "0.1.0",
   "dependencies": {
+    "cheerio": "^0.22.0",
     "deferred": "^0.7.5",
     "mongoose": "^4.6.4",
     "request": "^2.75.0"

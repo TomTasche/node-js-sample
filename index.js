@@ -1,6 +1,7 @@
 var deferred = require("deferred");
 var request = require("request");
 var mongoose = require("mongoose");
+var cheerio = require("cheerio");
 
 mongoose.connect(process.env.MONGODB_URI);
 
@@ -57,11 +58,59 @@ function waitFor(promises) {
   return future.promise;
 }
 
+function fetchRadio886() {
+  var future = deferred();
+
+  var requestOptions = {
+    url: "https://www.radio886.at/player/playlist.php"
+  };
+
+  request(requestOptions, function(error, response, body) {
+    if (!error && response.statusCode === 200) {
+      var trackPromises = [];
+
+      var html = cheerio.load(body);
+      var listItems = html("li");
+
+      for (var i = 0; i < listItems.length; i++) {
+        var element = cheerio(listItems[i]);
+        var trackData = element.text();
+
+        var name = "";
+        var dataParts = trackData.split(" ");
+        for (var j = 1; j < dataParts.length; j++) {
+          var part = dataParts[j];
+          name += " " + part;
+        }
+        name = name.trim();
+
+        var station = "886";
+
+        var nameSplit = name.split(" - ");
+        if (nameSplit.length > 1) {
+          artist = nameSplit[0];
+          title = nameSplit[1];
+        }
+
+        var trackPromise = saveTrack(name, title, artist, station);
+        trackPromises.push(trackPromise);
+      }
+
+      var savePromise = waitFor(trackPromises);
+      future.resolve(savePromise);
+    } else {
+      future.reject(error);
+    }
+  });
+
+  return future.promise;
+}
+
 function fetchRadioOe3() {
   var future = deferred();
 
   var requestOptions = {
-    url: "http://oe3meta.orf.at/oe3mdata/WebPlayerFiles/PlayList200.json",
+    url: "https://oe3meta.orf.at/oe3mdata/WebPlayerFiles/PlayList200.json",
     json: true
   };
 
@@ -90,8 +139,11 @@ function fetchRadioOe3() {
   return future.promise;
 }
 
-var oe3Promise = fetchRadioOe3();
-oe3Promise.then(function() {
+var radioOe3Promise = fetchRadioOe3();
+var radio886Promise = fetchRadio886();
+
+var promise = waitFor([radioOe3Promise, radio886Promise]);
+promise.then(function() {
   console.log("exitting!");
 
   process.exit(0);
