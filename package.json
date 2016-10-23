@@ -1,9 +1,6 @@
 {
   "name": "radio-scraper",
   "version": "0.1.0",
-  "scripts": {
-    "scrape": "node index.js"
-  },
   "dependencies": {
     "deferred": "^0.7.5",
     "mongoose": "^4.6.4",

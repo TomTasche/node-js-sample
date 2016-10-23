@@ -13,7 +13,7 @@ var trackSchema = {
 
 var Track = mongoose.model("Track", trackSchema);
 
-function saveTrack() {
+function saveTrack(name, title, artist, station) {
     var future = deferred();
 
     var track = new Track();
@@ -21,6 +21,8 @@ function saveTrack() {
     track.title = title;
     track.artist = artist;
     track.station = station;
+
+    console.log("saving track: " + JSON.stringify(track));
 
     track.save(function(error) {
         if (error) {
@@ -65,3 +67,5 @@ function fetchRadioOe3() {
 
     return future.promise;
 }
+
+fetchRadioOe3();
