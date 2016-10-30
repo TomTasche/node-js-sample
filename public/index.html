@@ -129,8 +129,10 @@
     }
 
     function login() {
+      var redirectUri = "https://radio-scraper.herokuapp.com/";
+      // redirectUri = "http://localhost:3000/";
+
       var clientId = "21bfbbac5dda4369807109ec63ee5777";
-      var redirectUri = "http://localhost:3000/";
       var scope = "user-read-private user-read-email playlist-modify-private";
 
       var url = "https://accounts.spotify.com/authorize";
