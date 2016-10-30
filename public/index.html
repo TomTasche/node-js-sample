@@ -20,6 +20,60 @@
   <script>
     var statusContainer;
 
+    var spotifyQueue = [];
+
+    function inspectQueue() {
+      if (!spotifyQueue.length) {
+        return;
+      }
+
+      var entry = spotifyQueue[0];
+
+      var requestOptions = entry.options;
+      var future = entry.future;
+
+      var promise = $.ajax(requestOptions);
+      promise.done(function(response) {
+        future.resolve(response);
+
+        spotifyQueue.shift();
+        inspectQueue();
+      }).catch(function(xhr) {
+        var statusCode = xhr.statusCode();
+        if (statusCode === 429) {
+          var timeout = parseInt(xhr.getResponseHeader("Retry-After"));
+          timeout = timeout || 1;
+          timeout = timeout * 1000;
+
+          window.setTimeout(inspectQueue, timeout);
+
+          return;
+        }
+
+        future.reject(xhr);
+
+        spotifyQueue.shift();
+        inspectQueue();
+      });
+    }
+
+    function spotifyRequest(requestOptions) {
+      var future = $.Deferred();
+
+      var entry = {
+        options: requestOptions,
+        future: future
+      };
+
+      spotifyQueue.push(entry);
+
+      if (spotifyQueue.length === 1) {
+        inspectQueue();
+      }
+
+      return future.promise();
+    }
+
     function getAccessToken() {
       return sessionStorage.getItem("accessToken");
     }
@@ -63,10 +117,8 @@
       };
       authenticateRequest(requestOptions, accessToken);
 
-      var promise = $.ajax(requestOptions);
+      var promise = spotifyRequest(requestOptions);
       promise.done(function(response) {
-        console.log(response);
-
         sessionStorage.setItem("accessToken", accessToken);
         sessionStorage.setItem("userId", response.id);
 
@@ -105,14 +157,156 @@
       };
       authenticateRequest(requestOptions);
 
-      var promise = $.ajax(requestOptions);
+      var promise = spotifyRequest(requestOptions);
       promise.done(function(response) {
-        console.log(response);
-
         var playlistId = response.id;
 
         future.resolve(playlistId);
       }).catch(future.reject);
+
+      return future.promise();
+    }
+
+    function fetchTracks(station) {
+      var future = $.Deferred();
+
+      // TODO: ask from user
+      station = "886";
+
+      var requestOptions = {
+        url: "/tracks?station=" + station,
+        dataType: "json"
+      };
+
+      var promise = $.ajax(requestOptions);
+      promise.done(function(tracks) {
+        future.resolve(tracks);
+      }).catch(future.reject);
+
+      return future.promise();
+    }
+
+    function searchTrack(track) {
+      var future = $.Deferred();
+
+      var query = "artist:\"" + track.artist + "\" track:\"" + track.title + "\"";
+
+      var data = {
+        limit: 1,
+        type: "track",
+        q: query
+      };
+
+      var requestOptions = {
+        url: "https://api.spotify.com/v1/search",
+        data: data
+      };
+      authenticateRequest(requestOptions);
+
+      var promise = spotifyRequest(requestOptions);
+      promise.done(function(response) {
+        var results = response.tracks.items;
+
+        if (!results.length) {
+          console.error("could not match track", track);
+
+          future.reject();
+
+          return;
+        }
+
+        var result = results[0];
+
+        console.log("matched tracks", track, result);
+
+        future.resolve(result);
+      }).catch(future.reject);
+
+      return future.promise();
+    }
+
+    function searchAllTracks(tracks) {
+      var future = $.Deferred();
+
+      var spotifyPromises = [];
+      var spotifyTracks = [];
+
+      var count = tracks.length;
+
+      var countDown = function() {
+        count--;
+
+        if (count === 0) {
+          future.resolve(spotifyTracks);
+        }
+      }
+
+      for (var i = 0; i < tracks.length; i++) {
+        var track = tracks[i];
+
+        var spotifyPromise = searchTrack(track);
+        spotifyPromise.done(function(spotifyTrack) {
+          spotifyTracks.push(spotifyTrack);
+
+          countDown();
+        }).catch(countDown);
+
+        spotifyPromises.push(spotifyPromise);
+      }
+
+      return future.promise();
+    }
+
+    function updatePlaylist(playlistId, tracks) {
+      function updatePlaylistInternal(url, uris) {
+        var future = $.Deferred();
+
+        var data = {
+          uris: uris
+        };
+
+        var requestOptions = {
+          method: "POST",
+          url: url,
+          data: JSON.stringify(data)
+        };
+        authenticateRequest(requestOptions);
+
+        var promise = spotifyRequest(requestOptions);
+        promise.done(future.resolve).catch(future.reject);
+
+        return future.promise();
+      }
+
+      var future = $.Deferred();
+
+      var uris = [];
+      for (var i = 0; i < tracks.length; i++) {
+        var track = tracks[i];
+
+        uris.push(track.uri);
+      }
+
+      var requestUrl = "https://api.spotify.com/v1/users/" + getUserId() + "/playlists/" + playlistId + "/tracks";
+
+      var count = 0;
+
+      function countDown() {
+        count--;
+
+        if (count === 0) {
+          future.resolve();
+        }
+      }
+
+      while (uris.length) {
+        var urisStack = uris.splice(0, 100);
+
+        var promise = updatePlaylistInternal(requestUrl, urisStack);
+        promise.done(countDown).catch(countDown);
+
+        count++;
+      }
 
       return future.promise();
     }
@@ -129,7 +323,17 @@
 
         var playlistPromise = createPlaylist(name);
         playlistPromise.done(function(playlistId) {
+          var tracksPromise = fetchTracks();
+          tracksPromise.done(function(tracks) {
 
+            var idsPromise = searchAllTracks(tracks);
+            idsPromise.done(function(spotifyTracks) {
+              var updatePromise = updatePlaylist(playlistId, spotifyTracks);
+              updatePromise.done(function() {
+                window.alert("done!");
+              });
+            });
+          });
         });
       });
 

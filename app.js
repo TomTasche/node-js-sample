@@ -28,7 +28,6 @@ var server = http.createServer(function onRequest(request, response) {
     var query = Track.find({
       station: station
     });
-    query.limit(10);
     query.exec(function(error, tracks) {
       response.end(JSON.stringify(tracks));
     });
