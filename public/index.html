@@ -1,0 +1,145 @@
+<!doctype html>
+<html>
+
+<head>
+</head>
+
+<body>
+  <div class="status-container">loading...</div>
+
+  <div class="app-container"></div>
+
+  <script id="create-playlist-template" type="text/html">
+    <div class="create-playlist-container">
+      <input type="text" class="playlist-name-input"></input>
+      <button class="create-playlist-button">create playlist</button>
+    </div>
+  </script>
+
+  <script src="jquery-3.1.1.min.js"></script>
+  <script>
+    var statusContainer;
+
+    function getAccessToken() {
+      return sessionStorage.getItem("accessToken");
+    }
+
+    function getUserId() {
+      return sessionStorage.getItem("userId");
+    }
+
+    function authenticateRequest(requestOptions, accessTokenParameter) {
+      var accessToken = accessTokenParameter || getAccessToken();
+
+      requestOptions.headers = requestOptions.headers || {};
+      requestOptions.headers["Authorization"] = "Bearer " + accessToken;
+    }
+
+    // taken from: https://github.com/spotify/web-api-auth-examples/blob/master/implicit_grant/public/index.html
+    function getHashParams() {
+      var hashParams = {};
+      var e, r = /([^&;=]+)=?([^&;]*)/g,
+        q = window.location.hash.substring(1);
+      while (e = r.exec(q)) {
+        hashParams[e[1]] = decodeURIComponent(e[2]);
+      }
+      return hashParams;
+    }
+
+    function validateLogin() {
+      var params = getHashParams();
+      var accessToken = params.access_token || getAccessToken();
+
+      var future = $.Deferred();
+
+      if (!accessToken) {
+        future.reject();
+
+        return future.promise();
+      }
+
+      var requestOptions = {
+        url: "https://api.spotify.com/v1/me"
+      };
+      authenticateRequest(requestOptions, accessToken);
+
+      var promise = $.ajax(requestOptions);
+      promise.done(function(response) {
+        console.log(response);
+
+        sessionStorage.setItem("accessToken", accessToken);
+        sessionStorage.setItem("userId", response.id);
+
+        future.resolve();
+      }).catch(future.reject);
+
+      return future.promise();
+    }
+
+    function login() {
+      var clientId = "21bfbbac5dda4369807109ec63ee5777";
+      var redirectUri = "http://localhost:3000/";
+      var scope = "user-read-private user-read-email playlist-modify-private";
+
+      var url = "https://accounts.spotify.com/authorize";
+      url += "?response_type=token";
+      url += "&client_id=" + encodeURIComponent(clientId);
+      url += "&scope=" + encodeURIComponent(scope);
+      url += "&redirect_uri=" + encodeURIComponent(redirectUri);
+
+      window.location.href = url;
+    }
+
+    function createPlaylist(name) {
+      var future = $.Deferred();
+
+      var data = {
+        public: false,
+        name: name
+      };
+
+      var requestOptions = {
+        method: "POST",
+        url: "https://api.spotify.com/v1/users/" + getUserId() + "/playlists",
+        data: JSON.stringify(data)
+      };
+      authenticateRequest(requestOptions);
+
+      var promise = $.ajax(requestOptions);
+      promise.done(function(response) {
+        console.log(response);
+
+        var playlistId = response.id;
+
+        future.resolve(playlistId);
+      }).catch(future.reject);
+
+      return future.promise();
+    }
+
+    statusContainer = $(".status-container");
+
+    var loginPromise = validateLogin();
+    loginPromise.done(function() {
+      statusContainer.text("logged in!");
+
+      var element = $($("#create-playlist-template").html());
+      element.find(".create-playlist-button").click(function() {
+        var name = element.find(".playlist-name-input").val();
+
+        var playlistPromise = createPlaylist(name);
+        playlistPromise.done(function(playlistId) {
+
+        });
+      });
+
+      $(".app-container").append(element);
+    }).fail(function() {
+      statusContainer.text("logging in...");
+
+      login();
+    });
+  </script>
+</body>
+
+</html>
