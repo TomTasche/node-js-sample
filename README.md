@@ -2,3 +2,5 @@ using Heroku Scheduler-addon to fetch "currently playing"-data from several radi
 
 
 data might be used to generate playlists in the future.
+
+https://plus.google.com/+ThomasTaschauer/posts/RRvXVCYckzH
